@@ -1,10 +1,13 @@
 """
 Streamlit frontend for the GST Entity Matcher.
 
+Deployed on Airbase. Calls the SageMaker endpoint on MAESTRO for matching —
+no local FAISS, embedding API, or S3 access needed.
+
 Supports:
 - Single entity lookup via text input
 - Batch lookup via CSV upload (auto-detects the entity name column)
-- Results displayed as an interactive table with score colour-coding
+- Results displayed as an interactive table
 - CSV download of results
 """
 import logging
@@ -12,8 +15,8 @@ import logging
 import pandas as pd
 import streamlit as st
 
+from app.api_client import match_entities
 from app.utils import parse_uploaded_csv, results_to_csv_bytes
-from matching.pipeline import match_entities
 
 logging.basicConfig(level=logging.INFO)
 

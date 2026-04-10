@@ -21,8 +21,9 @@ gst-registrants/
 │   ├── search.py               # Load FAISS index, embed query, retrieve candidates
 │   └── pipeline.py             # End-to-end: query names in → matched results out
 │
-├── app/                        # Streamlit frontend
+├── app/                        # Streamlit frontend (deployed on Airbase)
 │   ├── __init__.py
+│   ├── api_client.py           # HTTP client that calls the SageMaker endpoint
 │   ├── streamlit_app.py        # Main Streamlit app (upload CSV, show results, download)
 │   └── utils.py                # Helper functions (CSV parsing, results formatting)
 │
@@ -30,8 +31,9 @@ gst-registrants/
 │   ├── inference.py            # model_fn, input_fn, predict_fn, output_fn
 │   └── package_model.py        # Script to create model.tar.gz and upload to S3
 │
-├── deployment/                 # Deployment configs
-│   ├── Dockerfile              # Docker image for Airbase deployment
+├── deployment/                 # Deployment configs (Airbase)
+│   ├── Dockerfile              # Docker image for Airbase (only copies app/)
+│   ├── requirements.txt        # Slim deps for Airbase (no faiss/openai/boto3)
 │   ├── airbase.json            # Airbase project config
 │   └── .gitlab-ci.yml          # SGTS GitLab CI/CD pipeline for Airbase auto-deploy
 │
@@ -63,16 +65,16 @@ Run once (or whenever the GST reference list updates).
 - `run_indexing.py` — orchestrates: load CSV → embed → build index → save to S3
 
 ### `matching/`
-Used at query time (by both the Streamlit app and the SageMaker endpoint).
+Used at query time by the SageMaker endpoint (not by the Streamlit app on Airbase).
 - `search.py` — loads FAISS index from S3 (cached in memory), embeds query names, returns top-k candidates ranked by cosine similarity
 - `pipeline.py` — single function: `match_entities(query_names) → DataFrame of results`
 
 ### `app/`
-Streamlit frontend for prototyping and Airbase deployment.
+Streamlit frontend deployed on Airbase. Calls the SageMaker endpoint — no local FAISS, embedding API, or S3 access.
+- `api_client.py` — HTTP client that POSTs entity names to the SageMaker endpoint URL (set via `SAGEMAKER_ENDPOINT_URL` env var)
 - Single entity text input OR CSV file upload
 - Results displayed as interactive table
 - Download results as CSV
-- Shows match confidence (fuzzy score) with color coding
 
 ### `sagemaker/`
 For production: wraps matching logic as a SageMaker real-time endpoint.

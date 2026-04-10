@@ -2,10 +2,12 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+# Use the slim Airbase requirements (no faiss/openai/boto3)
+COPY deployment/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Only copy what the Streamlit app needs
+COPY app/ ./app/
 
 EXPOSE 8501
 

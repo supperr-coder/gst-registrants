@@ -13,12 +13,10 @@ This runs on Singapore Whole-of-Government (WOG) infrastructure:
 - **Storage**: S3 bucket on GCC 2.0
 - **LLM/Embedding API**: MAESTRO's LLM gateway (LiteLLM proxy to Azure OpenAI / AWS Bedrock)
 
-### Two deployment targets
+### Two deployment targets (same repo, different code paths)
 
-1. **SageMaker endpoint on MAESTRO** — serves the matching logic via API Gateway
-2. **Streamlit app on Airbase** — user-facing frontend that calls the MAESTRO API
-
-For prototyping, the Streamlit app can run standalone with matching logic embedded (no SageMaker endpoint needed). For production, split into frontend + backend.
+1. **SageMaker endpoint on MAESTRO** — serves the matching logic via API Gateway. Uses `indexing/`, `matching/`, `sagemaker/`, `config.py`. Has access to S3 and LLM API.
+2. **Streamlit app on Airbase** — user-facing frontend that calls the MAESTRO SageMaker endpoint. Uses only `app/` and `deployment/`. No direct S3 or LLM access.
 
 ## Matching Approach (Hybrid Embedding + Fuzzy)
 
@@ -29,11 +27,11 @@ For prototyping, the Streamlit app can run standalone with matching logic embedd
 4. Save FAISS index + entity metadata (parquet) to S3
 
 ### Query-time flow
-1. User uploads entity name(s) via Streamlit UI
-2. Embed user's query names using the same model
-3. FAISS approximate nearest neighbor search → retrieve top-20 candidates per query
-4. Return top-5 matches per query above a configurable similarity threshold (by cosine similarity)
-5. Display results in-app + allow CSV download
+1. User uploads entity name(s) via Streamlit UI (Airbase)
+2. Streamlit sends names to SageMaker endpoint via `app/api_client.py`
+3. SageMaker endpoint embeds query names, runs FAISS search, filters by threshold
+4. Returns top-5 matches per query (JSON)
+5. Streamlit displays results + allows CSV download
 
 ## Key Technical Details
 
