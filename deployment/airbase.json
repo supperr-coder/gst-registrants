@@ -4,6 +4,7 @@
   "port": 8501,
   "healthCheckPath": "/_stcore/health",
   "envVars": [
-    "SAGEMAKER_ENDPOINT_URL"
+    "SAGEMAKER_ENDPOINT_URL",
+    "SAGEMAKER_API_KEY"
   ]
 }
