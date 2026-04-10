@@ -4,9 +4,11 @@
 gst-registrants/
 │
 ├── .claude                     # Claude Code project instructions
+├── .gitignore                  # Git ignore rules (.env, __pycache__, etc.)
+├── .env.example                # Template for environment variables (copy to .env)
 ├── README.md                   # This file
 ├── requirements.txt            # Python dependencies
-├── config.py                   # All configurable values (S3 paths, model, thresholds)
+├── config.py                   # Non-secret config (S3 paths, model, thresholds)
 │
 ├── indexing/                   # One-time job: embed + build FAISS index
 │   ├── __init__.py
@@ -49,12 +51,12 @@ gst-registrants/
 ## Module Responsibilities
 
 ### `config.py`
-Single source of truth for all configuration. Other modules import from here.
+Single source of truth for non-secret configuration. Other modules import from here.
 - S3 bucket name, prefixes
 - Embedding model name, dimensions, batch size
 - Rate limit settings
 - FAISS top-k, final top-n, similarity threshold
-- API base URL (from env var)
+- API base URL (read from env var — the actual value lives in `.env`)
 
 ### `indexing/`
 Run once (or whenever the GST reference list updates).

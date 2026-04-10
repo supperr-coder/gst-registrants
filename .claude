@@ -72,6 +72,7 @@ For prototyping, the Streamlit app can run standalone with matching logic embedd
 - Use type hints for function signatures
 - Use docstrings for all public functions
 - Config values (S3 paths, model names, thresholds) at the top of each module as constants or in `config.py`
+- Secrets (API keys, credentials) go in `.env` and are loaded via `os.getenv()` or `python-dotenv` — never in `config.py` directly
 - Handle API failures gracefully with retries and logging
 - CSV column names will vary — never hardcode column names without making them configurable
 - All entity name comparisons should be case-insensitive (uppercase before comparing)
