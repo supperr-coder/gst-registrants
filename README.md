@@ -27,7 +27,7 @@ gst-registrants/
 │   ├── streamlit_app.py        # Main Streamlit app (upload CSV, show results, download)
 │   └── utils.py                # Helper functions (CSV parsing, results formatting)
 │
-├── sagemaker/                  # SageMaker endpoint (for production deployment)
+├── endpoint/                   # SageMaker endpoint (for production deployment)
 │   ├── inference.py            # model_fn, input_fn, predict_fn, output_fn
 │   └── package_model.py        # Script to create model.tar.gz and upload to S3
 │
@@ -76,7 +76,7 @@ Streamlit frontend deployed on Airbase. Calls the SageMaker endpoint — no loca
 - Results displayed as interactive table
 - Download results as CSV
 
-### `sagemaker/`
+### `endpoint/`
 For production: wraps matching logic as a SageMaker real-time endpoint.
 - `inference.py` — the four SageMaker handler functions
 - `package_model.py` — bundles FAISS index + code + requirements into model.tar.gz for SageMaker

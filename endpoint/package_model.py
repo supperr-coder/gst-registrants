@@ -2,7 +2,7 @@
 Package the model code into model.tar.gz and upload to S3 for SageMaker deployment.
 
 Run from the project root:
-    python sagemaker/package_model.py
+    python endpoint/package_model.py
 """
 import logging
 import os
@@ -24,7 +24,7 @@ INCLUDE_PATHS = [
     "requirements.txt",
     "indexing/",
     "matching/",
-    "sagemaker/inference.py",
+    "endpoint/inference.py",
 ]
 
 OUTPUT_TAR = "/tmp/model.tar.gz"
