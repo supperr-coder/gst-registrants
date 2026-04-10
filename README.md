@@ -4,9 +4,11 @@
 gst-registrants/
 │
 ├── .claude                     # Claude Code project instructions
+├── .gitignore                  # Git ignore rules (.env, __pycache__, etc.)
+├── .env.example                # Template for environment variables (copy to .env)
 ├── README.md                   # This file
 ├── requirements.txt            # Python dependencies
-├── config.py                   # All configurable values (S3 paths, model, thresholds)
+├── config.py                   # Non-secret config (S3 paths, model, thresholds)
 │
 ├── indexing/                   # One-time job: embed + build FAISS index
 │   ├── __init__.py
@@ -14,14 +16,14 @@ gst-registrants/
 │   ├── build_index.py          # Build FAISS index from embeddings, save to S3
 │   └── run_indexing.py         # Entrypoint: orchestrates full indexing pipeline
 │
-├── matching/                   # Query-time logic: search + re-rank
+├── matching/                   # Query-time logic: embed + search
 │   ├── __init__.py
 │   ├── search.py               # Load FAISS index, embed query, retrieve candidates
-│   ├── rerank.py               # Re-rank candidates with RapidFuzz
 │   └── pipeline.py             # End-to-end: query names in → matched results out
 │
-├── app/                        # Streamlit frontend
+├── app/                        # Streamlit frontend (deployed on Airbase)
 │   ├── __init__.py
+│   ├── api_client.py           # HTTP client that calls the SageMaker endpoint
 │   ├── streamlit_app.py        # Main Streamlit app (upload CSV, show results, download)
 │   └── utils.py                # Helper functions (CSV parsing, results formatting)
 │
@@ -29,8 +31,9 @@ gst-registrants/
 │   ├── inference.py            # model_fn, input_fn, predict_fn, output_fn
 │   └── package_model.py        # Script to create model.tar.gz and upload to S3
 │
-├── deployment/                 # Deployment configs
-│   ├── Dockerfile              # Docker image for Airbase deployment
+├── deployment/                 # Deployment configs (Airbase)
+│   ├── Dockerfile              # Docker image for Airbase (only copies app/)
+│   ├── requirements.txt        # Slim deps for Airbase (no faiss/openai/boto3)
 │   ├── airbase.json            # Airbase project config
 │   └── .gitlab-ci.yml          # SGTS GitLab CI/CD pipeline for Airbase auto-deploy
 │
@@ -42,19 +45,18 @@ gst-registrants/
 │
 └── tests/                      # Basic tests
     ├── test_embed.py           # Test embedding API calls
-    ├── test_search.py          # Test FAISS search returns valid results
-    └── test_rerank.py          # Test RapidFuzz re-ranking logic
+    └── test_search.py          # Test FAISS search returns valid results
 ```
 
 ## Module Responsibilities
 
 ### `config.py`
-Single source of truth for all configuration. Other modules import from here.
+Single source of truth for non-secret configuration. Other modules import from here.
 - S3 bucket name, prefixes
 - Embedding model name, dimensions, batch size
 - Rate limit settings
 - FAISS top-k, final top-n, similarity threshold
-- API base URL (from env var)
+- API base URL (read from env var — the actual value lives in `.env`)
 
 ### `indexing/`
 Run once (or whenever the GST reference list updates).
@@ -63,17 +65,16 @@ Run once (or whenever the GST reference list updates).
 - `run_indexing.py` — orchestrates: load CSV → embed → build index → save to S3
 
 ### `matching/`
-Used at query time (by both the Streamlit app and the SageMaker endpoint).
-- `search.py` — loads FAISS index from S3 (cached in memory), embeds query names, returns top-k candidates with cosine similarity scores
-- `rerank.py` — takes FAISS candidates, applies RapidFuzz token_set_ratio + jaro_winkler, sorts by combined score
+Used at query time by the SageMaker endpoint (not by the Streamlit app on Airbase).
+- `search.py` — loads FAISS index from S3 (cached in memory), embeds query names, returns top-k candidates ranked by cosine similarity
 - `pipeline.py` — single function: `match_entities(query_names) → DataFrame of results`
 
 ### `app/`
-Streamlit frontend for prototyping and Airbase deployment.
+Streamlit frontend deployed on Airbase. Calls the SageMaker endpoint — no local FAISS, embedding API, or S3 access.
+- `api_client.py` — HTTP client that POSTs entity names to the SageMaker endpoint URL (set via `SAGEMAKER_ENDPOINT_URL` env var)
 - Single entity text input OR CSV file upload
 - Results displayed as interactive table
 - Download results as CSV
-- Shows match confidence (fuzzy score) with color coding
 
 ### `sagemaker/`
 For production: wraps matching logic as a SageMaker real-time endpoint.

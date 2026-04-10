@@ -1,0 +1,31 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  IMAGE_NAME: gst-entity-matcher
+
+build:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  only:
+    - main
+  script:
+    - docker build -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
+    - docker tag $IMAGE_NAME:$CI_COMMIT_SHORT_SHA $IMAGE_NAME:latest
+
+deploy:
+  stage: deploy
+  image: docker:latest
+  only:
+    - main
+  needs:
+    - build
+  script:
+    # Replace the command below with the actual Airbase CLI deploy command
+    # for your SGTS GitLab environment.
+    - airbase deploy --app $IMAGE_NAME --image $IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+  environment:
+    name: production
