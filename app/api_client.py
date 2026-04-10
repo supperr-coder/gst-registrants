@@ -3,7 +3,7 @@ API client for calling the GST Entity Matcher SageMaker endpoint on MAESTRO.
 
 The Streamlit app on Airbase uses this module instead of importing matching
 logic directly — all heavy computation (embedding, FAISS search) happens on
-the SageMaker endpoint.
+the SageMaker endpoint, exposed via MAESTRO's API Gateway.
 """
 import logging
 import os
@@ -14,9 +14,10 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-# The SageMaker endpoint URL exposed via MAESTRO's API Gateway.
-# Set this as an environment variable on Airbase.
+# Set these as environment variables on Airbase.
+# Get them from MAESTRO: Domains Pane → Domain Details → API Gateway.
 SAGEMAKER_ENDPOINT_URL: str = os.getenv("SAGEMAKER_ENDPOINT_URL", "")
+SAGEMAKER_API_KEY: str = os.getenv("SAGEMAKER_API_KEY", "")
 
 
 def match_entities(query_names: List[str]) -> pd.DataFrame:
@@ -39,13 +40,17 @@ def match_entities(query_names: List[str]) -> pd.DataFrame:
             "Configure it as an environment variable on Airbase."
         )
 
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if SAGEMAKER_API_KEY:
+        headers["x-api-key"] = SAGEMAKER_API_KEY
+
     response = requests.post(
         SAGEMAKER_ENDPOINT_URL,
         json={"entity_names": query_names},
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
+        headers=headers,
         timeout=120,
     )
     response.raise_for_status()
