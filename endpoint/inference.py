@@ -16,10 +16,21 @@ Supported accept types: application/json, text/csv
 """
 import json
 import logging
-
-import pandas as pd
+import os
+import subprocess
+import sys
 
 logger = logging.getLogger(__name__)
+
+
+def _install_requirements(model_dir: str) -> None:
+    """Install packages from requirements.txt if present in the model archive."""
+    req_path = os.path.join(model_dir, "requirements.txt")
+    if os.path.exists(req_path):
+        logger.info("Installing dependencies from %s", req_path)
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "-r", req_path, "--quiet"]
+        )
 
 
 def model_fn(model_dir: str) -> dict:
@@ -30,11 +41,18 @@ def model_fn(model_dir: str) -> dict:
 
     Args:
         model_dir: Path to the directory where model artefacts are unpacked.
-                   Not used directly — artefacts are loaded from S3 via config.
 
     Returns:
         A dict with 'index' and 'metadata' keys (the in-memory cache).
     """
+    # Install extra packages (faiss-cpu, openai, python-dotenv, etc.)
+    _install_requirements(model_dir)
+
+    # Add model_dir to Python path so our modules are importable
+    if model_dir not in sys.path:
+        sys.path.insert(0, model_dir)
+
+    import pandas as pd
     from matching.search import load_index
 
     index, metadata = load_index()
@@ -71,7 +89,7 @@ def input_fn(request_body: str, content_type: str = "application/json") -> list[
     )
 
 
-def predict_fn(data: list[str], model: dict) -> pd.DataFrame:
+def predict_fn(data: list[str], model: dict):
     """
     Run the matching pipeline against the loaded index.
 
@@ -87,7 +105,7 @@ def predict_fn(data: list[str], model: dict) -> pd.DataFrame:
     return match_entities(data)
 
 
-def output_fn(prediction: pd.DataFrame, accept: str = "application/json") -> str:
+def output_fn(prediction, accept: str = "application/json") -> str:
     """
     Serialise the prediction DataFrame for the HTTP response.
 
