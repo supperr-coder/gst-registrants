@@ -32,9 +32,8 @@ For prototyping, the Streamlit app can run standalone with matching logic embedd
 1. User uploads entity name(s) via Streamlit UI
 2. Embed user's query names using the same model
 3. FAISS approximate nearest neighbor search → retrieve top-20 candidates per query
-4. Re-rank candidates using RapidFuzz (`token_set_ratio`, `jaro_winkler_similarity`)
-5. Return top-5 matches per query above a configurable similarity threshold
-6. Display results in-app + allow CSV download
+4. Return top-5 matches per query above a configurable similarity threshold (by cosine similarity)
+5. Display results in-app + allow CSV download
 
 ## Key Technical Details
 
@@ -55,11 +54,6 @@ For prototyping, the Streamlit app can run standalone with matching logic embedd
 - Index type: `IndexFlatIP` (exact inner product on L2-normalized vectors = cosine similarity)
 - 100K vectors at 1024 dims ≈ ~400MB in memory — fits comfortably
 - Query latency: <10ms for top-k search
-
-### Re-ranking
-- `rapidfuzz.fuzz.token_set_ratio` — primary re-ranking metric (handles word reordering, partial matches)
-- `rapidfuzz.fuzz.jaro_winkler_similarity` — secondary metric (handles typos, prefix similarity)
-- Compare uppercased strings to normalize case
 
 ### Environment
 - Python 3.10+

@@ -16,10 +16,9 @@ gst-registrants/
 │   ├── build_index.py          # Build FAISS index from embeddings, save to S3
 │   └── run_indexing.py         # Entrypoint: orchestrates full indexing pipeline
 │
-├── matching/                   # Query-time logic: search + re-rank
+├── matching/                   # Query-time logic: embed + search
 │   ├── __init__.py
 │   ├── search.py               # Load FAISS index, embed query, retrieve candidates
-│   ├── rerank.py               # Re-rank candidates with RapidFuzz
 │   └── pipeline.py             # End-to-end: query names in → matched results out
 │
 ├── app/                        # Streamlit frontend
@@ -44,8 +43,7 @@ gst-registrants/
 │
 └── tests/                      # Basic tests
     ├── test_embed.py           # Test embedding API calls
-    ├── test_search.py          # Test FAISS search returns valid results
-    └── test_rerank.py          # Test RapidFuzz re-ranking logic
+    └── test_search.py          # Test FAISS search returns valid results
 ```
 
 ## Module Responsibilities
@@ -66,8 +64,7 @@ Run once (or whenever the GST reference list updates).
 
 ### `matching/`
 Used at query time (by both the Streamlit app and the SageMaker endpoint).
-- `search.py` — loads FAISS index from S3 (cached in memory), embeds query names, returns top-k candidates with cosine similarity scores
-- `rerank.py` — takes FAISS candidates, applies RapidFuzz token_set_ratio + jaro_winkler, sorts by combined score
+- `search.py` — loads FAISS index from S3 (cached in memory), embeds query names, returns top-k candidates ranked by cosine similarity
 - `pipeline.py` — single function: `match_entities(query_names) → DataFrame of results`
 
 ### `app/`

@@ -1,0 +1,10 @@
+{
+  "name": "gst-entity-matcher",
+  "framework": "docker",
+  "port": 8501,
+  "healthCheckPath": "/_stcore/health",
+  "envVars": [
+    "OPENAI_API_KEY",
+    "OPENAI_API_BASE"
+  ]
+}
