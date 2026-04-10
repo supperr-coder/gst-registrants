@@ -1,0 +1,87 @@
+# GST Entity Matching Application
+
+## Project Overview
+
+Build a web application that checks whether entities (company names) are GST-registered in Singapore. Users upload a single entity name or a CSV of entity names, and the app returns the best matches from a pool of GST-registered entities stored in S3.
+
+## Architecture
+
+This runs on Singapore Whole-of-Government (WOG) infrastructure:
+
+- **Backend compute**: MAESTRO (GovTech's MLOps platform on GCC 2.0, built on AWS SageMaker)
+- **Frontend hosting**: Airbase (GovTech's app deployment platform on GCC 2.0, Vercel-like)
+- **Storage**: S3 bucket on GCC 2.0
+- **LLM/Embedding API**: MAESTRO's LLM gateway (LiteLLM proxy to Azure OpenAI / AWS Bedrock)
+
+### Two deployment targets
+
+1. **SageMaker endpoint on MAESTRO** — serves the matching logic via API Gateway
+2. **Streamlit app on Airbase** — user-facing frontend that calls the MAESTRO API
+
+For prototyping, the Streamlit app can run standalone with matching logic embedded (no SageMaker endpoint needed). For production, split into frontend + backend.
+
+## Matching Approach (Hybrid Embedding + Fuzzy)
+
+### One-time indexing job
+1. Load ~100K GST-registered entity names from S3
+2. Embed all names using `text-embedding-3-large` (1024 dimensions) via MAESTRO's LLM API
+3. Build a FAISS `IndexFlatIP` index from normalized embeddings
+4. Save FAISS index + entity metadata (parquet) to S3
+
+### Query-time flow
+1. User uploads entity name(s) via Streamlit UI
+2. Embed user's query names using the same model
+3. FAISS approximate nearest neighbor search → retrieve top-20 candidates per query
+4. Re-rank candidates using RapidFuzz (`token_set_ratio`, `jaro_winkler_similarity`)
+5. Return top-5 matches per query above a configurable similarity threshold
+6. Display results in-app + allow CSV download
+
+## Key Technical Details
+
+### S3 Configuration
+- Bucket: `sst-s3-gvt-agml-prodizna-d-andnwekll2vd-bucket`
+- GST source data prefix: `gst-registrants/`
+- Embedding artifacts prefix: `gst-matching/embeddings/`
+- Artifacts saved: `gst_faiss.index`, `gst_metadata.parquet`, `config.json`
+
+### Embedding API
+- Model: `text-embedding-3-large`
+- Dimensions: 1024 (reduced from 3072 default for efficiency)
+- Rate limits: 50K TPM, 50 RPM
+- Batch size: 100 names per request
+- Client: `openai` Python SDK pointing to MAESTRO's LiteLLM proxy base URL
+
+### FAISS
+- Index type: `IndexFlatIP` (exact inner product on L2-normalized vectors = cosine similarity)
+- 100K vectors at 1024 dims ≈ ~400MB in memory — fits comfortably
+- Query latency: <10ms for top-k search
+
+### Re-ranking
+- `rapidfuzz.fuzz.token_set_ratio` — primary re-ranking metric (handles word reordering, partial matches)
+- `rapidfuzz.fuzz.jaro_winkler_similarity` — secondary metric (handles typos, prefix similarity)
+- Compare uppercased strings to normalize case
+
+### Environment
+- Python 3.10+
+- MAESTRO SageMaker JupyterLab for development
+- boto3 credentials handled automatically by SageMaker IAM role (no manual keys needed)
+- Packages installed via MAESTRO's Nexus Repository (`pip install`)
+
+## Conventions
+
+- Use type hints for function signatures
+- Use docstrings for all public functions
+- Config values (S3 paths, model names, thresholds) at the top of each module as constants or in `config.py`
+- Handle API failures gracefully with retries and logging
+- CSV column names will vary — never hardcode column names without making them configurable
+- All entity name comparisons should be case-insensitive (uppercase before comparing)
+- Use parquet for metadata storage (faster than CSV for structured data)
+- Use `/tmp/` for local temp files on SageMaker (ephemeral storage)
+
+## What NOT to do
+
+- Don't use ChromaDB, Pinecone, or any vector database — FAISS in-memory is sufficient for 100K records
+- Don't use `sentence-transformers` — we use OpenAI's `text-embedding-3-large` via API instead
+- Don't hardcode API keys in source code — use environment variables
+- Don't assume internet access from MAESTRO — all external packages come through Nexus Repository
+- Don't use `text-embedding-3-small` — it's disabled (0 TPM) in our MAESTRO environment
