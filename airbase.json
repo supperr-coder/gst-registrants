@@ -1,7 +1,7 @@
 {
   "framework": "container",
   "handle": "gstd/active-gst-registrants",
-  "port": 8501,
+  "port": 3000,
   "instanceType": "nano",
   "healthCheckPath": "/_stcore/health",
   "envVars": [

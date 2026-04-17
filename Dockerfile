@@ -11,11 +11,6 @@ COPY --chown=app:app app/ ./
 
 USER app
 
-EXPOSE 8501
+EXPOSE 3000
 
-HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
-
-CMD ["streamlit", "run", "streamlit_app.py", \
-     "--server.port=8501", \
-     "--server.address=0.0.0.0", \
-     "--server.headless=true"]
+CMD ["sh", "-c", "streamlit run streamlit_app.py --server.port=${PORT:-3000} --server.address=0.0.0.0 --server.headless=true"]
