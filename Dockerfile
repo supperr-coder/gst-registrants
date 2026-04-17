@@ -1,4 +1,4 @@
-FROM gdssingapore/airbase:python-3.13
+FROM registry.sgts.gitlab-dedicated.com/innersource/sgts/runtime/airbase/images/gdssingapore/airbase:python-3.13
 
 ENV PYTHONUNBUFFERED=TRUE
 
