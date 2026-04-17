@@ -2,10 +2,5 @@
   "framework": "container",
   "handle": "gstd/active-gst-registrants",
   "port": 3000,
-  "instanceType": "nano",
-  "healthCheckPath": "/_stcore/health",
-  "envVars": [
-    "SAGEMAKER_ENDPOINT_URL",
-    "SAGEMAKER_API_KEY"
-  ]
+  "instanceType": "nano"
 }
