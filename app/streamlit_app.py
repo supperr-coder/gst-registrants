@@ -15,8 +15,8 @@ import logging
 import pandas as pd
 import streamlit as st
 
-from app.api_client import match_entities
-from app.utils import parse_uploaded_csv, results_to_csv_bytes
+from api_client import match_entities
+from utils import parse_uploaded_csv, results_to_csv_bytes
 
 logging.basicConfig(level=logging.INFO)
 

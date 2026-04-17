@@ -13,7 +13,7 @@ build:
   only:
     - main
   script:
-    - docker build -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
+    - docker build -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA -f app/Dockerfile app/
     - docker tag $IMAGE_NAME:$CI_COMMIT_SHORT_SHA $IMAGE_NAME:latest
 
 deploy:

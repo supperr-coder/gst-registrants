@@ -21,21 +21,19 @@ gst-registrants/
 │   ├── search.py               # Load FAISS index, embed query, retrieve candidates
 │   └── pipeline.py             # End-to-end: query names in → matched results out
 │
-├── app/                        # Streamlit frontend (deployed on Airbase)
+├── app/                        # Streamlit frontend + deployment (deployed on Airbase)
 │   ├── __init__.py
 │   ├── api_client.py           # HTTP client that calls the SageMaker endpoint
 │   ├── streamlit_app.py        # Main Streamlit app (upload CSV, show results, download)
-│   └── utils.py                # Helper functions (CSV parsing, results formatting)
+│   ├── utils.py                # Helper functions (CSV parsing, results formatting)
+│   ├── Dockerfile              # Docker image for Airbase
+│   ├── requirements.txt        # Slim deps for Airbase (no faiss/openai/boto3)
+│   ├── airbase.json            # Airbase project config
+│   └── .gitlab-ci.yml          # SGTS GitLab CI/CD pipeline for Airbase auto-deploy
 │
 ├── endpoint/                   # SageMaker endpoint (for production deployment)
 │   ├── inference.py            # model_fn, input_fn, predict_fn, output_fn
 │   └── package_model.py        # Script to create model.tar.gz and upload to S3
-│
-├── deployment/                 # Deployment configs (Airbase)
-│   ├── Dockerfile              # Docker image for Airbase (only copies app/)
-│   ├── requirements.txt        # Slim deps for Airbase (no faiss/openai/boto3)
-│   ├── airbase.json            # Airbase project config
-│   └── .gitlab-ci.yml          # SGTS GitLab CI/CD pipeline for Airbase auto-deploy
 │
 ├── notebooks/                  # Jupyter notebooks for MAESTRO development
 │   ├── 01_explore_data.ipynb   # Explore GST entity data from S3
@@ -81,11 +79,9 @@ For production: wraps matching logic as a SageMaker real-time endpoint.
 - `inference.py` — the four SageMaker handler functions
 - `package_model.py` — bundles FAISS index + code + requirements into model.tar.gz for SageMaker
 
-### `deployment/`
-Deployment artifacts for Airbase + GitLab CI/CD.
-- `Dockerfile` — containerizes the Streamlit app
-- `airbase.json` — Airbase project configuration
-- `.gitlab-ci.yml` — auto-deploy to Airbase on push to main
+### `app/` (deployment)
+Deployment artifacts (Dockerfile, requirements.txt, airbase.json, .gitlab-ci.yml) live alongside
+the app code in `app/` so the Docker build context can find all files without cross-folder COPY.
 
 ### `notebooks/`
 Step-by-step Jupyter notebooks for running on MAESTRO SageMaker JupyterLab.
