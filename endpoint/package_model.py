@@ -39,10 +39,15 @@ def package_model() -> None:
     """
     logger.info("Creating %s", OUTPUT_TAR)
 
+    def _exclude(info):
+        if "__pycache__" in info.name or info.name.endswith(".pyc"):
+            return None
+        return info
+
     with tarfile.open(OUTPUT_TAR, "w:gz") as tar:
         for path in INCLUDE_PATHS:
             if os.path.exists(path):
-                tar.add(path)
+                tar.add(path, filter=_exclude)
                 logger.info("  added: %s", path)
             else:
                 logger.warning("  skipped (not found): %s", path)
