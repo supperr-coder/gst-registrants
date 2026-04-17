@@ -1,9 +1,9 @@
 {
-  "name": "gst-entity-matcher",
-  "framework": "docker",
-  "port": 8501,
-  "healthCheckPath": "/_stcore/health",
+  "framework": "container",
   "handle": "gstd/active-gst-registrants",
+  "port": 8501,
+  "instanceType": "nano",
+  "healthCheckPath": "/_stcore/health",
   "envVars": [
     "SAGEMAKER_ENDPOINT_URL",
     "SAGEMAKER_API_KEY"
