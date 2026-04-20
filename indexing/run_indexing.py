@@ -14,7 +14,7 @@ import pandas as pd
 
 from config import S3_BUCKET, S3_GST_PREFIX
 from indexing.build_index import build_faiss_index, save_artifacts_to_s3
-from indexing.embed import embed_names
+from indexing.embed import embed_names, clear_checkpoints
 
 logging.basicConfig(
     level=logging.INFO,
@@ -125,6 +125,7 @@ def run_indexing(entity_column: str | None = None) -> None:
     metadata = pd.DataFrame({"entity_name": names})
     save_artifacts_to_s3(index, metadata)
 
+    clear_checkpoints()
     logger.info("=== Indexing complete ===")
 
 
