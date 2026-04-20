@@ -118,14 +118,13 @@ def clear_checkpoints() -> None:
     logger.info("Cleared checkpoints from s3://%s/%s", S3_BUCKET, S3_CHECKPOINT_PREFIX)
 
 
-def embed_names(names: List[str]) -> np.ndarray:
+def embed_names(names: List[str], use_checkpoints: bool = True) -> np.ndarray:
     """
-    Embed a list of entity names with batching, rate limiting, and checkpointing.
-
-    Resumes from the last checkpoint if a previous run was interrupted.
+    Embed a list of entity names with batching, rate limiting, and optional checkpointing.
 
     Args:
         names: List of entity name strings.
+        use_checkpoints: If True, save/resume from S3 checkpoints. Set False for small test runs.
 
     Returns:
         Float32 array of shape (len(names), EMBEDDING_DIMENSIONS), L2-normalised.
@@ -139,7 +138,7 @@ def embed_names(names: List[str]) -> np.ndarray:
     ]
     total_batches = len(batches)
 
-    last_completed = _get_last_checkpoint()
+    last_completed = _get_last_checkpoint() if use_checkpoints else -1
     if last_completed >= 0:
         logger.info(
             "Resuming from checkpoint: %d / %d batches already done",
@@ -156,18 +155,20 @@ def embed_names(names: List[str]) -> np.ndarray:
 
         embeddings = embed_batch(client, batch)
         all_embeddings.append(embeddings)
-        _save_checkpoint(batch_num, embeddings)
+        if use_checkpoints:
+            _save_checkpoint(batch_num, embeddings)
 
         elapsed = time.time() - t_start
         if elapsed < min_interval:
             time.sleep(min_interval - elapsed)
 
         logger.info(
-            "Embedded %d / %d names (batch %d/%d, checkpointed)",
+            "Embedded %d / %d names (batch %d/%d%s)",
             min((batch_num + 1) * EMBEDDING_BATCH_SIZE, len(names)),
             len(names),
             batch_num + 1,
             total_batches,
+            ", checkpointed" if use_checkpoints else "",
         )
 
     return np.vstack(all_embeddings)
