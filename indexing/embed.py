@@ -162,13 +162,14 @@ def embed_names(names: List[str], use_checkpoints: bool = True) -> np.ndarray:
         if elapsed < min_interval:
             time.sleep(min_interval - elapsed)
 
-        logger.info(
-            "Embedded %d / %d names (batch %d/%d%s)",
-            min((batch_num + 1) * EMBEDDING_BATCH_SIZE, len(names)),
-            len(names),
-            batch_num + 1,
-            total_batches,
-            ", checkpointed" if use_checkpoints else "",
-        )
+        if (batch_num + 1) % 25 == 0 or batch_num == total_batches - 1:
+            logger.info(
+                "Embedded %d / %d names (batch %d/%d%s)",
+                min((batch_num + 1) * EMBEDDING_BATCH_SIZE, len(names)),
+                len(names),
+                batch_num + 1,
+                total_batches,
+                ", checkpointed" if use_checkpoints else "",
+            )
 
     return np.vstack(all_embeddings)
