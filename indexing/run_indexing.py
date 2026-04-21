@@ -6,6 +6,7 @@ Usage (from project root):
     python -m indexing.run_indexing --entity-column entity_name
 """
 import argparse
+import io
 import logging
 
 import boto3
@@ -15,6 +16,15 @@ from config import S3_BUCKET, S3_GST_FILE
 from indexing.build_index import build_faiss_index, save_artifacts_to_s3
 from indexing.embed import embed_names, clear_checkpoints
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+    handlers=[
+        logging.FileHandler("indexing.txt"),
+        # logging.StreamHandler()
+    ]
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
