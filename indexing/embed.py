@@ -122,6 +122,9 @@ def embed_names(names: List[str], use_checkpoints: bool = True) -> np.ndarray:
     """
     Embed a list of entity names with batching, rate limiting, and optional checkpointing.
 
+    Checkpoints are loaded only after all embedding is complete, not on resume.
+    This avoids wasting time downloading .npy files if the process crashes again.
+
     Args:
         names: List of entity name strings.
         use_checkpoints: If True, save/resume from S3 checkpoints. Set False for small test runs.
@@ -141,20 +144,19 @@ def embed_names(names: List[str], use_checkpoints: bool = True) -> np.ndarray:
     last_completed = _get_last_checkpoint() if use_checkpoints else -1
     if last_completed >= 0:
         logger.info(
-            "Resuming from checkpoint: %d / %d batches already done",
-            last_completed + 1,
+            "Resuming from checkpoint: skipping to batch %d / %d",
+            last_completed + 2,
             total_batches,
         )
-        all_embeddings = _load_checkpoints(last_completed + 1)
-    else:
-        all_embeddings = []
+
+    new_embeddings = []
 
     for batch_num in range(last_completed + 1, total_batches):
         batch = [n.upper() for n in batches[batch_num]]
         t_start = time.time()
 
         embeddings = embed_batch(client, batch)
-        all_embeddings.append(embeddings)
+        new_embeddings.append(embeddings)
         if use_checkpoints:
             _save_checkpoint(batch_num, embeddings)
 
@@ -162,7 +164,7 @@ def embed_names(names: List[str], use_checkpoints: bool = True) -> np.ndarray:
         if elapsed < min_interval:
             time.sleep(min_interval - elapsed)
 
-        if (batch_num + 1) % 25 == 0 or batch_num == total_batches - 1:
+        if (batch_num + 1) % 50 == 0 or batch_num == total_batches - 1:
             logger.info(
                 "Embedded %d / %d names (batch %d/%d%s)",
                 min((batch_num + 1) * EMBEDDING_BATCH_SIZE, len(names)),
@@ -171,5 +173,12 @@ def embed_names(names: List[str], use_checkpoints: bool = True) -> np.ndarray:
                 total_batches,
                 ", checkpointed" if use_checkpoints else "",
             )
+
+    if last_completed >= 0 and use_checkpoints:
+        logger.info("Loading %d previous checkpoints from S3...", last_completed + 1)
+        previous_embeddings = _load_checkpoints(last_completed + 1)
+        all_embeddings = previous_embeddings + new_embeddings
+    else:
+        all_embeddings = new_embeddings
 
     return np.vstack(all_embeddings)
