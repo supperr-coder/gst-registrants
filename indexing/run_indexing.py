@@ -12,7 +12,7 @@ import logging
 import boto3
 import pandas as pd
 
-from config import S3_BUCKET, S3_GST_PREFIX
+from config import S3_BUCKET, S3_GST_FILE
 from indexing.build_index import build_faiss_index, save_artifacts_to_s3
 from indexing.embed import embed_names, clear_checkpoints
 
@@ -65,7 +65,7 @@ def _detect_entity_column(df: pd.DataFrame) -> str:
 
 def load_gst_entities(entity_column: str | None = None) -> list[str]:
     """
-    Load all entity names from CSV / Parquet files under S3_GST_PREFIX.
+    Load entity names from the file specified by S3_GST_FILE in config.
 
     Args:
         entity_column: Explicit column name to use. Auto-detected if None.
@@ -74,34 +74,24 @@ def load_gst_entities(entity_column: str | None = None) -> list[str]:
         Deduplicated list of uppercased entity name strings.
     """
     s3 = boto3.client("s3")
-    paginator = s3.get_paginator("list_objects_v2")
 
-    all_names: list[str] = []
+    logger.info("Loading s3://%s/%s", S3_BUCKET, S3_GST_FILE)
+    body = s3.get_object(Bucket=S3_BUCKET, Key=S3_GST_FILE)["Body"].read()
 
-    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=S3_GST_PREFIX):
-        for obj in page.get("Contents", []):
-            key: str = obj["Key"]
-            if key.endswith("/"):
-                continue  # skip directory-like keys
+    if S3_GST_FILE.endswith(".parquet"):
+        df = pd.read_parquet(io.BytesIO(body))
+    elif S3_GST_FILE.endswith(".csv"):
+        df = pd.read_csv(io.BytesIO(body))
+    else:
+        raise ValueError(f"Unsupported file type: {S3_GST_FILE}. Use .csv or .parquet.")
 
-            logger.info("Loading s3://%s/%s", S3_BUCKET, key)
-            body = s3.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read()
-
-            if key.endswith(".parquet"):
-                df = pd.read_parquet(io.BytesIO(body))
-            elif key.endswith(".csv"):
-                df = pd.read_csv(io.BytesIO(body))
-            else:
-                logger.warning("Skipping unsupported file type: %s", key)
-                continue
-
-            col = entity_column or _detect_entity_column(df)
-            all_names.extend(df[col].dropna().str.upper().tolist())
+    col = entity_column or _detect_entity_column(df)
+    all_names = df[col].dropna().str.upper().tolist()
 
     # Deduplicate while preserving order
     seen: set[str] = set()
     unique_names = [n for n in all_names if not (n in seen or seen.add(n))]  # type: ignore[func-returns-value]
-    logger.info("Loaded %d unique entity names", len(unique_names))
+    logger.info("Loaded %d unique entity names from column '%s'", len(unique_names), col)
     return unique_names
 
 

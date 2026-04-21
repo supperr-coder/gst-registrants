@@ -14,6 +14,7 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 S3_BUCKET = "sst-s3-gvt-agml-prodizna-d-andnwekll2vd-bucket"
 S3_GST_PREFIX = "gst-registrants/"
+S3_GST_FILE = f"{S3_GST_PREFIX}registered_names.csv"  # update to actual filename
 S3_EMBEDDINGS_PREFIX = "gst-matching/embeddings/"
 S3_CHECKPOINT_PREFIX = "gst-matching/checkpoints/"
 S3_FAISS_KEY = f"{S3_EMBEDDINGS_PREFIX}gst_faiss.index"
