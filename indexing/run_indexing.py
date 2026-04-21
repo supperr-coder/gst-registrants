@@ -6,7 +6,6 @@ Usage (from project root):
     python -m indexing.run_indexing --entity-column entity_name
 """
 import argparse
-import io
 import logging
 
 import boto3
