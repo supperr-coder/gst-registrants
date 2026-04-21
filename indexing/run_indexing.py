@@ -16,10 +16,6 @@ from config import S3_BUCKET, S3_GST_FILE
 from indexing.build_index import build_faiss_index, save_artifacts_to_s3
 from indexing.embed import embed_names, clear_checkpoints
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 
