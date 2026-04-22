@@ -49,8 +49,9 @@ def embed_batch(client: OpenAI, texts: List[str], retries: int = 3) -> np.ndarra
                 input=texts,
                 dimensions=EMBEDDING_DIMENSIONS,
             )
+            sorted_data = sorted(response.data, key=lambda x: x.index)
             embeddings = np.array(
-                [item.embedding for item in response.data], dtype=np.float32
+                [item.embedding for item in sorted_data], dtype=np.float32
             )
             norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
             return embeddings / norms

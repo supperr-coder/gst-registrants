@@ -75,7 +75,7 @@ def search(query_names: List[str], top_k: int = FAISS_TOP_K) -> List[List[dict]]
     """
     index, metadata = load_index()
 
-    query_embeddings = embed_names(query_names)  # already uppercased + normalised inside embed_names
+    query_embeddings = embed_names(query_names, use_checkpoints=False)
     scores, indices = index.search(query_embeddings, top_k)
 
     results: List[List[dict]] = []
