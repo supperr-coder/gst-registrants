@@ -1,0 +1,6 @@
+{
+  "framework": "container",
+  "handle": "gstd/active-gst-registrants",
+  "port": 3000,
+  "instanceType": "nano"
+}

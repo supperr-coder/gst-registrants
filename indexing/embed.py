@@ -1,12 +1,13 @@
 """
 Embed entity names via the text-embedding-3-large API.
 
-Handles batching, rate limiting (50 RPM), and retries.
+Handles batching, rate limiting (50 RPM), retries, and S3 checkpointing.
 """
 import logging
 import time
 from typing import List
 
+import boto3
 import numpy as np
 from openai import OpenAI
 
@@ -17,6 +18,8 @@ from config import (
     EMBEDDING_DIMENSIONS,
     EMBEDDING_BATCH_SIZE,
     RATE_LIMIT_RPM,
+    S3_BUCKET,
+    S3_CHECKPOINT_PREFIX,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,8 +49,9 @@ def embed_batch(client: OpenAI, texts: List[str], retries: int = 3) -> np.ndarra
                 input=texts,
                 dimensions=EMBEDDING_DIMENSIONS,
             )
+            sorted_data = sorted(response.data, key=lambda x: x.index)
             embeddings = np.array(
-                [item.embedding for item in response.data], dtype=np.float32
+                [item.embedding for item in sorted_data], dtype=np.float32
             )
             norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
             return embeddings / norms
@@ -66,38 +70,116 @@ def embed_batch(client: OpenAI, texts: List[str], retries: int = 3) -> np.ndarra
                 raise
 
 
-def embed_names(names: List[str]) -> np.ndarray:
-    """
-    Embed a list of entity names with batching and rate limiting.
+def _get_last_checkpoint() -> int:
+    """Return the last completed batch number from S3, or -1 if none."""
+    s3 = boto3.client("s3")
+    try:
+        obj = s3.get_object(
+            Bucket=S3_BUCKET,
+            Key=f"{S3_CHECKPOINT_PREFIX}last_completed.txt",
+        )
+        return int(obj["Body"].read().decode().strip())
+    except s3.exceptions.NoSuchKey:
+        return -1
+    except Exception:
+        return -1
 
-    Names are uppercased before embedding for consistency.
+
+def _save_checkpoint(batch_num: int, embeddings: np.ndarray) -> None:
+    """Save a batch's embeddings and update the progress marker in S3."""
+    s3 = boto3.client("s3")
+    path = f"/tmp/checkpoint_{batch_num}.npy"
+    np.save(path, embeddings)
+    s3.upload_file(path, S3_BUCKET, f"{S3_CHECKPOINT_PREFIX}batch_{batch_num}.npy")
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=f"{S3_CHECKPOINT_PREFIX}last_completed.txt",
+        Body=str(batch_num).encode(),
+    )
+
+
+def _load_checkpoints(num_batches: int) -> List[np.ndarray]:
+    """Load all completed checkpoint embeddings from S3."""
+    s3 = boto3.client("s3")
+    results = []
+    for i in range(num_batches):
+        path = f"/tmp/checkpoint_{i}.npy"
+        s3.download_file(S3_BUCKET, f"{S3_CHECKPOINT_PREFIX}batch_{i}.npy", path)
+        results.append(np.load(path))
+    return results
+
+
+def clear_checkpoints() -> None:
+    """Delete all checkpoint files from S3. Call after indexing completes."""
+    s3 = boto3.client("s3")
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=S3_CHECKPOINT_PREFIX):
+        for obj in page.get("Contents", []):
+            s3.delete_object(Bucket=S3_BUCKET, Key=obj["Key"])
+    logger.info("Cleared checkpoints from s3://%s/%s", S3_BUCKET, S3_CHECKPOINT_PREFIX)
+
+
+def embed_names(names: List[str], use_checkpoints: bool = True) -> np.ndarray:
+    """
+    Embed a list of entity names with batching, rate limiting, and optional checkpointing.
+
+    Checkpoints are loaded only after all embedding is complete, not on resume.
+    This avoids wasting time downloading .npy files if the process crashes again.
 
     Args:
         names: List of entity name strings.
+        use_checkpoints: If True, save/resume from S3 checkpoints. Set False for small test runs.
 
     Returns:
         Float32 array of shape (len(names), EMBEDDING_DIMENSIONS), L2-normalised.
     """
     client = _get_client()
-    min_interval = 60.0 / RATE_LIMIT_RPM  # minimum seconds between requests
+    min_interval = 60.0 / RATE_LIMIT_RPM
 
-    all_embeddings: List[np.ndarray] = []
+    batches = [
+        names[i : i + EMBEDDING_BATCH_SIZE]
+        for i in range(0, len(names), EMBEDDING_BATCH_SIZE)
+    ]
+    total_batches = len(batches)
 
-    for i in range(0, len(names), EMBEDDING_BATCH_SIZE):
-        batch = [n.upper() for n in names[i : i + EMBEDDING_BATCH_SIZE]]
+    last_completed = _get_last_checkpoint() if use_checkpoints else -1
+    if last_completed >= 0:
+        logger.info(
+            "Resuming from checkpoint: skipping to batch %d / %d",
+            last_completed + 2,
+            total_batches,
+        )
+
+    new_embeddings = []
+
+    for batch_num in range(last_completed + 1, total_batches):
+        batch = [n.upper() for n in batches[batch_num]]
         t_start = time.time()
 
         embeddings = embed_batch(client, batch)
-        all_embeddings.append(embeddings)
+        new_embeddings.append(embeddings)
+        if use_checkpoints:
+            _save_checkpoint(batch_num, embeddings)
 
         elapsed = time.time() - t_start
         if elapsed < min_interval:
             time.sleep(min_interval - elapsed)
 
-        logger.info(
-            "Embedded %d / %d names",
-            min(i + EMBEDDING_BATCH_SIZE, len(names)),
-            len(names),
-        )
+        if (batch_num + 1) % 50 == 0 or batch_num == total_batches - 1:
+            logger.info(
+                "Embedded %d / %d names (batch %d/%d%s)",
+                min((batch_num + 1) * EMBEDDING_BATCH_SIZE, len(names)),
+                len(names),
+                batch_num + 1,
+                total_batches,
+                ", checkpointed" if use_checkpoints else "",
+            )
+
+    if last_completed >= 0 and use_checkpoints:
+        logger.info("Loading %d previous checkpoints from S3...", last_completed + 1)
+        previous_embeddings = _load_checkpoints(last_completed + 1)
+        all_embeddings = previous_embeddings + new_embeddings
+    else:
+        all_embeddings = new_embeddings
 
     return np.vstack(all_embeddings)

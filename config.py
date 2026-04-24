@@ -1,9 +1,3 @@
-"""
-Central configuration for the GST Entity Matcher.
-
-Non-secret values are defined here as constants.
-Secrets (API keys, credentials) are loaded from environment variables — set them in .env.
-"""
 import os
 from dotenv import load_dotenv
 
@@ -13,10 +7,12 @@ load_dotenv()
 # S3
 # ---------------------------------------------------------------------------
 S3_BUCKET = "sst-s3-gvt-agml-prodizna-d-andnwekll2vd-bucket"
-S3_GST_PREFIX = "gst-registrants/"
-S3_EMBEDDINGS_PREFIX = "gst-matching/embeddings/"
-S3_FAISS_KEY = f"{S3_EMBEDDINGS_PREFIX}gst_faiss.index"
-S3_METADATA_KEY = f"{S3_EMBEDDINGS_PREFIX}gst_metadata.parquet"
+S3_GST_PREFIX = "registered-names/"
+S3_GST_FILE = f"{S3_GST_PREFIX}registered_names.csv"  # update to actual filename
+S3_EMBEDDINGS_PREFIX = "registered-names/embeddings/"
+S3_CHECKPOINT_PREFIX = "registered-names/checkpoints/"
+S3_FAISS_KEY = f"{S3_EMBEDDINGS_PREFIX}faiss.index"
+S3_METADATA_KEY = f"{S3_EMBEDDINGS_PREFIX}metadata.parquet"
 S3_CONFIG_KEY = f"{S3_EMBEDDINGS_PREFIX}config.json"
 
 # ---------------------------------------------------------------------------
@@ -39,5 +35,5 @@ SIMILARITY_THRESHOLD = 0.70  # minimum cosine similarity to include a match
 # ---------------------------------------------------------------------------
 # Local temp paths (ephemeral storage on SageMaker)
 # ---------------------------------------------------------------------------
-TMP_FAISS_PATH = "/tmp/gst_faiss.index"
-TMP_METADATA_PATH = "/tmp/gst_metadata.parquet"
+TMP_FAISS_PATH = "/tmp/faiss.index"
+TMP_METADATA_PATH = "/tmp/metadata.parquet"

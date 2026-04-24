@@ -56,7 +56,8 @@ with tab_single:
 
     if st.button("Search", key="btn_single") and entity_input.strip():
         with st.spinner("Matching..."):
-            results = match_entities([entity_input.strip()])
+            # results = match_entities([entity_input.strip()])
+            results = pd.DataFrame()  # placeholder for empty df
 
         if results["matched_entity"].isna().all():
             st.warning("No matches found above the similarity threshold.")
@@ -91,7 +92,8 @@ with tab_batch:
                     df[detected_col].dropna().str.strip().unique().tolist()
                 )
                 with st.spinner(f"Matching {len(query_names)} unique entities..."):
-                    results = match_entities(query_names)
+                    # results = match_entities(query_names)
+                    results = pd.DataFrame()  # placeholder for empty df
 
                 matched = results["matched_entity"].notna().sum()
                 total = results["query_name"].nunique()

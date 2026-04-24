@@ -16,7 +16,7 @@ This runs on Singapore Whole-of-Government (WOG) infrastructure:
 ### Two deployment targets (same repo, different code paths)
 
 1. **SageMaker endpoint on MAESTRO** — serves the matching logic via API Gateway. Uses `indexing/`, `matching/`, `sagemaker/`, `config.py`. Has access to S3 and LLM API.
-2. **Streamlit app on Airbase** — user-facing frontend that calls the MAESTRO SageMaker endpoint. Uses only `app/` and `deployment/`. No direct S3 or LLM access.
+2. **Streamlit app on Airbase** — user-facing frontend that calls the MAESTRO SageMaker endpoint. Uses only `app/` (which contains Dockerfile, requirements.txt, airbase.json, and .gitlab-ci.yml). No direct S3 or LLM access.
 
 ## Matching Approach (Hybrid Embedding + Fuzzy)
 
