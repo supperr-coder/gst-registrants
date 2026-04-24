@@ -48,7 +48,7 @@ def package_model() -> None:
     logger.info("Creating %s", OUTPUT_TAR)
 
     def _exclude(info):
-        if "__pycache__" in info.name or info.name.endswith(".pyc"):
+        if "__pycache__" in info.name or ".ipynb_checkpoints" in info.name or info.name.endswith(".pyc"):
             return None
         return info
 
