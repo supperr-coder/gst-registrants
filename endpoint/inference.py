@@ -13,24 +13,17 @@ Expected request format (application/json):
     {"entity_names": ["ENTITY A", "ENTITY B", ...]}
 
 Supported accept types: application/json, text/csv
+
+This file must live at code/inference.py inside model.tar.gz.
+The serving container auto-adds code/ to sys.path and auto-installs
+code/requirements.txt.
 """
 import json
 import logging
-import os
-import subprocess
-import sys
+
+from matching.search import load_index
 
 logger = logging.getLogger(__name__)
-
-
-def _install_requirements(model_dir: str) -> None:
-    """Install packages from requirements.txt if present in the model archive."""
-    req_path = os.path.join(model_dir, "requirements.txt")
-    if os.path.exists(req_path):
-        logger.info("Installing dependencies from %s", req_path)
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "-r", req_path, "--quiet"]
-        )
 
 
 def model_fn(model_dir: str) -> dict:
@@ -45,16 +38,6 @@ def model_fn(model_dir: str) -> dict:
     Returns:
         A dict with 'index' and 'metadata' keys (the in-memory cache).
     """
-    # Install extra packages (faiss-cpu, openai, python-dotenv, etc.)
-    _install_requirements(model_dir)
-
-    # Add model_dir to Python path so our modules are importable
-    if model_dir not in sys.path:
-        sys.path.insert(0, model_dir)
-
-    import pandas as pd
-    from matching.search import load_index
-
     index, metadata = load_index()
     logger.info("Model loaded: %d entities indexed", len(metadata))
     return {"index": index, "metadata": metadata}
