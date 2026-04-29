@@ -7,10 +7,10 @@ Match company names against ~1.8M GST-registered entities in Singapore using emb
 ```mermaid
 graph TB
     subgraph Airbase ["AIRBASE (Frontend)"]
-        User["User Browser<br/>Name Input / Download CSV"]
-        App["streamlit_app.py<br/>Text input,<br/>Results table, CSV download"]
+        User["User Browser<br/>3 Tabs: Company / GST Company / Individual"]
+        App["streamlit_app.py<br/>Multi-line text input,<br/>Results table, CSV download"]
         API["api_client.py<br/>POST JSON request,<br/>x-api-key header"]
-        Utils["utils.py<br/>Parse CSV, detect column,<br/>format results"]
+        Utils["utils.py<br/>Format results to CSV"]
 
         User --> App
         App --> API
@@ -46,16 +46,15 @@ graph TB
 sequenceDiagram
     participant U as User
     participant S as streamlit_app.py
-    participant V as utils.py
     participant A as api_client.py
+    participant V as utils.py
     participant E as SageMaker Endpoint
 
-    U->>S: Upload CSV
-    S->>V: parse_uploaded_csv()
-    V-->>S: DataFrame + detected column
+    U->>S: Enter entity names (one per line)
+    Note left of S: Company tab active<br/>(GST Company & Individual TBD)
 
-    S->>A: match_entities(names)
-    A->>E: POST {"entity_names": ["COMPANY A", ...]}
+    S->>A: match_entities(names_list)
+    A->>E: POST {"entity_names": ["COMPANY A", "COMPANY B", ...]}
     Note right of A: Headers: Content-Type: application/json<br/>x-api-key: ***
     E-->>A: [{"query_name": "...", "matched_entity": "...", "score": 0.95, "rank": 1}]
     A-->>S: DataFrame of results
@@ -73,7 +72,7 @@ sequenceDiagram
 gst-registrants/
 │
 ├── app/                        # Streamlit frontend (deployed on Airbase)
-│   ├── streamlit_app.py        # Main app — single entity + batch CSV tabs
+│   ├── streamlit_app.py        # Main app — Company / GST Company / Individual tabs
 │   ├── api_client.py           # HTTP client → SageMaker endpoint via API Gateway
 │   ├── utils.py                # CSV parsing, column detection, results formatting
 │   └── requirements.txt        # Slim deps (streamlit, pandas, requests — no FAISS)
