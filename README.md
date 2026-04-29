@@ -7,8 +7,8 @@ Match company names against ~1.8M GST-registered entities in Singapore using emb
 ```mermaid
 graph TB
     subgraph Airbase ["AIRBASE (Frontend)"]
-        User["User Browser<br/>Single name / CSV upload / Download CSV"]
-        App["streamlit_app.py<br/>Text input, CSV upload,<br/>Results table, CSV download"]
+        User["User Browser<br/>Name Input / Download CSV"]
+        App["streamlit_app.py<br/>Text input,<br/>Results table, CSV download"]
         API["api_client.py<br/>POST JSON request,<br/>x-api-key header"]
         Utils["utils.py<br/>Parse CSV, detect column,<br/>format results"]
 
