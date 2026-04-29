@@ -1,97 +1,159 @@
-# GST Entity Matcher — Project Structure
+# GST Entity Matcher
+
+Match company names against ~1.8M GST-registered entities in Singapore using embedding-based similarity search (FAISS + OpenAI text-embedding-3-large).
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          AIRBASE (Frontend)                             │
+│                                                                         │
+│  ┌───────────────┐    ┌──────────────────┐    ┌──────────────────────┐  │
+│  │  User Browser  │───▶│  streamlit_app.py │───▶│   api_client.py     │  │
+│  │                │    │                  │    │                      │  │
+│  │ • Single name  │    │ • Text input     │    │ • POST JSON request  │  │
+│  │ • CSV upload   │    │ • CSV upload     │    │ • x-api-key header   │  │
+│  │ • Download CSV │    │ • Results table  │    │ • Parse JSON response│  │
+│  └───────────────┘    │ • CSV download   │    └──────────┬───────────┘  │
+│                        └──────────────────┘               │              │
+│                                 ▲                         │              │
+│                                 │                         │              │
+│                        ┌────────┴─────────┐               │              │
+│                        │    utils.py       │               │              │
+│                        │ • parse CSV       │               │              │
+│                        │ • detect column   │               │              │
+│                        │ • format results  │               │              │
+│                        └──────────────────┘               │              │
+└───────────────────────────────────────────────────────────┼──────────────┘
+                                                            │
+                                              HTTPS (API Gateway)
+                                                            │
+┌───────────────────────────────────────────────────────────┼──────────────┐
+│                     MAESTRO (Backend)                      │              │
+│                                                            ▼              │
+│  ┌──────────────────────────────────────────────────────────────────┐    │
+│  │                   SageMaker Endpoint (ml.m5.xlarge)              │    │
+│  │                                                                  │    │
+│  │  inference.py                                                    │    │
+│  │  ┌────────────┐  ┌────────────┐  ┌─────────────┐  ┌──────────┐ │    │
+│  │  │  input_fn   │─▶│ predict_fn │─▶│  output_fn  │─▶│ Response │ │    │
+│  │  │ parse JSON  │  │            │  │ JSON or CSV │  │          │ │    │
+│  │  └────────────┘  │  ┌───────┐ │  └─────────────┘  └──────────┘ │    │
+│  │                   │  │search │ │                                 │    │
+│  │  ┌────────────┐  │  │.py    │ │                                 │    │
+│  │  │  model_fn   │  │  ├───────┤ │                                 │    │
+│  │  │ load FAISS  │  │  │embed  │ │                                 │    │
+│  │  │ from S3     │  │  │.py    │ │                                 │    │
+│  │  └────────────┘  │  └───────┘ │                                 │    │
+│  │                   └────────────┘                                 │    │
+│  └──────────────────────────────────────────────────────────────────┘    │
+│                              │                         │                 │
+│                         Load index                Call embedding API     │
+│                              │                         │                 │
+│                              ▼                         ▼                 │
+│                     ┌──────────────┐         ┌──────────────────┐       │
+│                     │  S3 Bucket   │         │  LiteLLM Proxy   │       │
+│                     │ FAISS index  │         │  (OpenAI API)    │       │
+│                     │ + metadata   │         │  text-embedding  │       │
+│                     └──────────────┘         │  -3-large        │       │
+│                                              └──────────────────┘       │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Airbase Request Flow
+
+```
+User uploads CSV
+  │
+  ▼
+streamlit_app.py
+  ├── utils.parse_uploaded_csv()      ← parse file, detect entity column
+  ├── api_client.match_entities()     ← POST to SageMaker endpoint
+  │     │
+  │     ├── Request:  {"entity_names": ["COMPANY A", "COMPANY B", ...]}
+  │     ├── Headers:  Content-Type: application/json, x-api-key: ***
+  │     └── Response: [{"query_name": "...", "matched_entity": "...", "score": 0.95, "rank": 1}, ...]
+  │
+  ├── Display results as interactive table
+  └── Download button → utils.results_to_csv_bytes()
+```
+
+## Project Structure
 
 ```
 gst-registrants/
 │
-├── .claude                     # Claude Code project instructions
-├── .gitignore                  # Git ignore rules (.env, __pycache__, etc.)
-├── .env.example                # Template for environment variables (copy to .env)
-├── README.md                   # This file
-├── requirements.txt            # Python dependencies
-├── config.py                   # Non-secret config (S3 paths, model, thresholds)
+├── app/                        # Streamlit frontend (deployed on Airbase)
+│   ├── streamlit_app.py        # Main app — single entity + batch CSV tabs
+│   ├── api_client.py           # HTTP client → SageMaker endpoint via API Gateway
+│   ├── utils.py                # CSV parsing, column detection, results formatting
+│   └── requirements.txt        # Slim deps (streamlit, pandas, requests — no FAISS)
 │
-├── indexing/                   # One-time job: embed + build FAISS index
-│   ├── __init__.py
-│   ├── embed.py                # Embed entity names via text-embedding-3-large API
-│   ├── build_index.py          # Build FAISS index from embeddings, save to S3
-│   └── run_indexing.py         # Entrypoint: orchestrates full indexing pipeline
-│
-├── matching/                   # Query-time logic: embed + search
-│   ├── __init__.py
-│   ├── search.py               # Load FAISS index, embed query, retrieve candidates
-│   └── pipeline.py             # End-to-end: query names in → matched results out
-│
-├── app/                        # Streamlit frontend + deployment (deployed on Airbase)
-│   ├── __init__.py
-│   ├── api_client.py           # HTTP client that calls the SageMaker endpoint
-│   ├── streamlit_app.py        # Main Streamlit app (upload CSV, show results, download)
-│   ├── utils.py                # Helper functions (CSV parsing, results formatting)
-│   ├── Dockerfile              # Docker image for Airbase
-│   ├── requirements.txt        # Slim deps for Airbase (no faiss/openai/boto3)
-│   ├── airbase.json            # Airbase project config
-│   └── .gitlab-ci.yml          # SGTS GitLab CI/CD pipeline for Airbase auto-deploy
-│
-├── endpoint/                   # SageMaker endpoint (for production deployment)
+├── endpoint/                   # SageMaker endpoint (deployed on MAESTRO)
 │   ├── inference.py            # model_fn, input_fn, predict_fn, output_fn
-│   └── package_model.py        # Script to create model.tar.gz and upload to S3
+│   └── package_model.py        # Bundle code + deps into model.tar.gz for S3
 │
-├── notebooks/                  # Jupyter notebooks for MAESTRO development
+├── indexing/                   # One-time job: embed all entities + build FAISS index
+│   ├── embed.py                # Batched API calls to text-embedding-3-large
+│   ├── build_index.py          # Build FAISS IndexFlatIP, save to S3
+│   └── run_indexing.py         # Orchestrator: load CSV → embed → index → upload
+│
+├── matching/                   # Query-time logic (runs inside SageMaker endpoint)
+│   ├── search.py               # Load FAISS index, embed query, return top-k
+│   └── pipeline.py             # match_entities() — single entry point
+│
+├── notebooks/                  # MAESTRO JupyterLab notebooks
 │   ├── 01_explore_data.ipynb   # Explore GST entity data from S3
-│   ├── 02_run_indexing.ipynb   # Run the one-time embedding + indexing job
-│   ├── 03_test_matching.ipynb  # Test queries against the built index
-│   └── 04_deploy_endpoint.ipynb# Deploy SageMaker endpoint on MAESTRO
+│   ├── 02_run_indexing.ipynb   # Run embedding + indexing pipeline
+│   ├── 03_test_matching.ipynb  # Test queries against the index
+│   └── 04_deploy_endpoint.ipynb# Register + deploy SageMaker endpoint
 │
-└── tests/                      # Basic tests
-    ├── test_embed.py           # Test embedding API calls
-    └── test_search.py          # Test FAISS search returns valid results
+├── tests/
+│   ├── test_embed.py
+│   └── test_search.py
+│
+├── config.py                   # Shared config (S3 paths, model, thresholds)
+├── requirements.txt            # Full deps (MAESTRO / SageMaker endpoint)
+├── Dockerfile                  # Airbase container image
+├── airbase.json                # Airbase project config
+├── .gitlab-ci.yml              # CI/CD pipeline (auto-deploy to Airbase)
+├── .env.example                # Template for environment variables
+└── .gitignore
 ```
 
-## Module Responsibilities
+## Deployment
 
-### `config.py`
-Single source of truth for non-secret configuration. Other modules import from here.
-- S3 bucket name, prefixes
-- Embedding model name, dimensions, batch size
-- Rate limit settings
-- FAISS top-k, final top-n, similarity threshold
-- API base URL (read from env var — the actual value lives in `.env`)
+### Airbase (Frontend)
 
-### `indexing/`
-Run once (or whenever the GST reference list updates).
-- `embed.py` — handles batched API calls to text-embedding-3-large with rate limiting + retries
-- `build_index.py` — takes embeddings array, builds FAISS IndexFlatIP, saves index + metadata to S3
-- `run_indexing.py` — orchestrates: load CSV → embed → build index → save to S3
+Deploys automatically via GitLab CI/CD when you push to the default branch.
 
-### `matching/`
-Used at query time by the SageMaker endpoint (not by the Streamlit app on Airbase).
-- `search.py` — loads FAISS index from S3 (cached in memory), embeds query names, returns top-k candidates ranked by cosine similarity
-- `pipeline.py` — single function: `match_entities(query_names) → DataFrame of results`
+**Runtime env vars** (set via `AIRBASE_ENV_LOCAL_FILE` CI/CD variable):
+| Variable | Description |
+|----------|-------------|
+| `SAGEMAKER_ENDPOINT_URL` | API Gateway URL from MAESTRO |
+| `SAGEMAKER_API_KEY` | API key from MAESTRO API Gateway |
 
-### `app/`
-Streamlit frontend deployed on Airbase. Calls the SageMaker endpoint — no local FAISS, embedding API, or S3 access.
-- `api_client.py` — HTTP client that POSTs entity names to the SageMaker endpoint URL (set via `SAGEMAKER_ENDPOINT_URL` env var)
-- Single entity text input OR CSV file upload
-- Results displayed as interactive table
-- Download results as CSV
+### MAESTRO (Backend)
 
-### `endpoint/`
-For production: wraps matching logic as a SageMaker real-time endpoint.
-- `inference.py` — the four SageMaker handler functions
-- `package_model.py` — bundles FAISS index + code + requirements into model.tar.gz for SageMaker
+Deploy via `notebooks/04_deploy_endpoint.ipynb`:
+1. Package model artifacts → upload `model.tar.gz` to S3
+2. Register Model Package (with env vars for OpenAI keys, TorchServe config)
+3. Approve in MAESTRO UI
+4. Deploy endpoint (ml.m5.xlarge, 1 worker)
+5. Attach to API Gateway in MAESTRO UI
 
-### `app/` (deployment)
-Deployment artifacts (Dockerfile, requirements.txt, airbase.json, .gitlab-ci.yml) live alongside
-the app code in `app/` so the Docker build context can find all files without cross-folder COPY.
-
-### `notebooks/`
-Step-by-step Jupyter notebooks for running on MAESTRO SageMaker JupyterLab.
-These are the "do it interactively" versions of the pipeline — useful for initial setup, debugging, and testing.
+**Container env vars** (set in Model Package, Step 5):
+| Variable | Description |
+|----------|-------------|
+| `OPENAI_API_KEY` | From MAESTRO JupyterLab environment |
+| `OPENAI_API_BASE` | LiteLLM proxy URL |
+| `SAGEMAKER_TS_RESPONSE_TIMEOUT` | TorchServe model-load timeout (600s) |
+| `SAGEMAKER_MODEL_SERVER_WORKERS` | Number of TorchServe workers (1) |
 
 ## Development Workflow
 
-1. Start in `notebooks/01_explore_data.ipynb` — verify S3 access, inspect the GST data
-2. Run `notebooks/02_run_indexing.ipynb` — embed all entities, build + save FAISS index (~20 min)
-3. Test in `notebooks/03_test_matching.ipynb` — query the index with sample names, tune thresholds
-4. Run Streamlit locally: `streamlit run app/streamlit_app.py` (on MAESTRO or locally)
-5. When ready for production: deploy SageMaker endpoint via `notebooks/04_deploy_endpoint.ipynb`
-6. Deploy Streamlit to Airbase via GitLab CI/CD or Airbase CLI
+1. **Explore data** — `notebooks/01_explore_data.ipynb`
+2. **Build index** — `notebooks/02_run_indexing.ipynb` (embed all entities, ~20 min)
+3. **Test matching** — `notebooks/03_test_matching.ipynb`
+4. **Deploy endpoint** — `notebooks/04_deploy_endpoint.ipynb`
+5. **Deploy frontend** — push to default branch → CI/CD auto-deploys to Airbase
