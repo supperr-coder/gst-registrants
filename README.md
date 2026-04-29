@@ -30,7 +30,7 @@ graph TB
             Inference --> Predict --> Output
         end
 
-        S3["S3 Bucket<br/>FAISS index + metadata"]
+        S3["S3 Bucket (involves large mem)<br/>FAISS index + metadata"]
         LiteLLM["LiteLLM Proxy<br/>text-embedding-3-large"]
 
         ModelFn -- "Load index" --> S3
