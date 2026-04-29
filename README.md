@@ -4,78 +4,67 @@ Match company names against ~1.8M GST-registered entities in Singapore using emb
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          AIRBASE (Frontend)                             │
-│                                                                         │
-│  ┌───────────────┐    ┌──────────────────┐    ┌──────────────────────┐  │
-│  │  User Browser  │───▶│  streamlit_app.py │───▶│   api_client.py     │  │
-│  │                │    │                  │    │                      │  │
-│  │ • Single name  │    │ • Text input     │    │ • POST JSON request  │  │
-│  │ • CSV upload   │    │ • CSV upload     │    │ • x-api-key header   │  │
-│  │ • Download CSV │    │ • Results table  │    │ • Parse JSON response│  │
-│  └───────────────┘    │ • CSV download   │    └──────────┬───────────┘  │
-│                        └──────────────────┘               │              │
-│                                 ▲                         │              │
-│                                 │                         │              │
-│                        ┌────────┴─────────┐               │              │
-│                        │    utils.py       │               │              │
-│                        │ • parse CSV       │               │              │
-│                        │ • detect column   │               │              │
-│                        │ • format results  │               │              │
-│                        └──────────────────┘               │              │
-└───────────────────────────────────────────────────────────┼──────────────┘
-                                                            │
-                                              HTTPS (API Gateway)
-                                                            │
-┌───────────────────────────────────────────────────────────┼──────────────┐
-│                     MAESTRO (Backend)                      │              │
-│                                                            ▼              │
-│  ┌──────────────────────────────────────────────────────────────────┐    │
-│  │                   SageMaker Endpoint (ml.m5.xlarge)              │    │
-│  │                                                                  │    │
-│  │  inference.py                                                    │    │
-│  │  ┌────────────┐  ┌────────────┐  ┌─────────────┐  ┌──────────┐ │    │
-│  │  │  input_fn   │─▶│ predict_fn │─▶│  output_fn  │─▶│ Response │ │    │
-│  │  │ parse JSON  │  │            │  │ JSON or CSV │  │          │ │    │
-│  │  └────────────┘  │  ┌───────┐ │  └─────────────┘  └──────────┘ │    │
-│  │                   │  │search │ │                                 │    │
-│  │  ┌────────────┐  │  │.py    │ │                                 │    │
-│  │  │  model_fn   │  │  ├───────┤ │                                 │    │
-│  │  │ load FAISS  │  │  │embed  │ │                                 │    │
-│  │  │ from S3     │  │  │.py    │ │                                 │    │
-│  │  └────────────┘  │  └───────┘ │                                 │    │
-│  │                   └────────────┘                                 │    │
-│  └──────────────────────────────────────────────────────────────────┘    │
-│                              │                         │                 │
-│                         Load index                Call embedding API     │
-│                              │                         │                 │
-│                              ▼                         ▼                 │
-│                     ┌──────────────┐         ┌──────────────────┐       │
-│                     │  S3 Bucket   │         │  LiteLLM Proxy   │       │
-│                     │ FAISS index  │         │  (OpenAI API)    │       │
-│                     │ + metadata   │         │  text-embedding  │       │
-│                     └──────────────┘         │  -3-large        │       │
-│                                              └──────────────────┘       │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Airbase ["AIRBASE (Frontend)"]
+        User["User Browser<br/>Single name / CSV upload / Download CSV"]
+        App["streamlit_app.py<br/>Text input, CSV upload,<br/>Results table, CSV download"]
+        API["api_client.py<br/>POST JSON request,<br/>x-api-key header"]
+        Utils["utils.py<br/>Parse CSV, detect column,<br/>format results"]
+
+        User --> App
+        App --> API
+        Utils --> App
+    end
+
+    API -- "HTTPS (API Gateway)" --> Inference
+
+    subgraph MAESTRO ["MAESTRO (Backend)"]
+        subgraph Endpoint ["SageMaker Endpoint (ml.m5.xlarge)"]
+            ModelFn["model_fn<br/>Load FAISS from S3"]
+            Inference["input_fn<br/>Parse JSON"]
+            Predict["predict_fn<br/>search.py + embed.py"]
+            Output["output_fn<br/>JSON or CSV"]
+
+            ModelFn -. "startup" .-> Predict
+            Inference --> Predict --> Output
+        end
+
+        S3["S3 Bucket<br/>FAISS index + metadata"]
+        LiteLLM["LiteLLM Proxy<br/>text-embedding-3-large"]
+
+        ModelFn -- "Load index" --> S3
+        Predict -- "Call embedding API" --> LiteLLM
+    end
+
+    Output -- "JSON response" --> API
 ```
 
 ### Airbase Request Flow
 
-```
-User uploads CSV
-  │
-  ▼
-streamlit_app.py
-  ├── utils.parse_uploaded_csv()      ← parse file, detect entity column
-  ├── api_client.match_entities()     ← POST to SageMaker endpoint
-  │     │
-  │     ├── Request:  {"entity_names": ["COMPANY A", "COMPANY B", ...]}
-  │     ├── Headers:  Content-Type: application/json, x-api-key: ***
-  │     └── Response: [{"query_name": "...", "matched_entity": "...", "score": 0.95, "rank": 1}, ...]
-  │
-  ├── Display results as interactive table
-  └── Download button → utils.results_to_csv_bytes()
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant S as streamlit_app.py
+    participant V as utils.py
+    participant A as api_client.py
+    participant E as SageMaker Endpoint
+
+    U->>S: Upload CSV
+    S->>V: parse_uploaded_csv()
+    V-->>S: DataFrame + detected column
+
+    S->>A: match_entities(names)
+    A->>E: POST {"entity_names": ["COMPANY A", ...]}
+    Note right of A: Headers: Content-Type: application/json<br/>x-api-key: ***
+    E-->>A: [{"query_name": "...", "matched_entity": "...", "score": 0.95, "rank": 1}]
+    A-->>S: DataFrame of results
+
+    S-->>U: Display interactive results table
+    U->>S: Click download
+    S->>V: results_to_csv_bytes()
+    V-->>S: CSV bytes
+    S-->>U: Download CSV file
 ```
 
 ## Project Structure
